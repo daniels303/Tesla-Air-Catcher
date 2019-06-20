@@ -1,0 +1,178 @@
+/*
+  Web client
+
+ This sketch connects to a website (http://www.google.com)
+ using a WiFi shield.
+
+ This example is written for a network using WPA encryption. For
+ WEP or WPA, change the WiFi.begin() call accordingly.
+
+ This example is written for a network using WPA encryption. For
+ WEP or WPA, change the WiFi.begin() call accordingly.
+
+ Circuit:
+ * WiFi shield attached
+
+ created 13 July 2010
+ by dlf (Metodo2 srl)
+ modified 31 May 2012
+ by Tom Igoe
+ */
+
+
+#include <SPI.h>
+#include <WiFi101.h>
+#include "Zanshin_BME680.h" // Include the BME680 Sensor library
+/*******************************************************************************************************************
+** Declare global variables and instantiate classes                                                               **
+*******************************************************************************************************************/
+BME680_Class BME680; ///< Create an instance of the BME680
+#include "arduino_secrets.h" 
+///////please enter your sensitive data in the Secret tab/arduino_secrets.h
+char ssid[] = SECRET_SSID;        // your network SSID (name)
+char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
+int keyIndex = 0;            // your network key Index number (needed only for WEP)
+
+int status = WL_IDLE_STATUS;
+// if you don't want to use DNS (and reduce your sketch size)
+// use the numeric IP instead of the name for the server:
+//IPAddress server(74,125,232,128);  // numeric IP for Google (no DNS)
+char server[] = "jetstream1.chordsrt.com";    // name address for Google (using DNS)
+
+// Initialize the Ethernet client library
+// with the IP address and port of the server
+// that you want to connect to (port 80 is default for HTTP):
+WiFiClient client;
+
+float altitude(const float seaLevel=1013.25) 
+{
+  static float Altitude;
+  int32_t temp, hum, press, gas;
+  BME680.getSensorData(temp,hum,press,gas); // Get the most recent values from the device
+  Altitude = 44330.0*(1.0-pow(((float)press/100.0)/seaLevel,0.1903)); // Convert into altitude in meters
+  return(Altitude);
+} // of method altitude()
+
+void setup() {
+  //Initialize serial and wait for port to open:
+  Serial.begin(9600);
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }
+
+  // check for the presence of the shield:
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WiFi shield not present");
+    // don't continue:
+    while (true);
+  }
+
+  // attempt to connect to WiFi network:
+  while (status != WL_CONNECTED) {
+    Serial.print("Attempting to connect to SSID: ");
+    Serial.println(ssid);
+    // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
+    status = WiFi.begin(ssid, pass);
+
+    // wait 10 seconds for connection:
+    delay(10000);
+  }
+  Serial.println("Connected to wifi");
+  printWiFiStatus();
+    Serial.println(F("Starting I2CDemo example program for BME680"));
+  Serial.print(F("- Initializing BME680 sensor\n"));
+  while (!BME680.begin(I2C_STANDARD_MODE)) // Start BME680 using I2C protocol
+  {
+    Serial.println(F("-  Unable to find BME680. Waiting 3 seconds."));
+    delay(3000);
+  } // of loop until device is located
+  Serial.println(F("- Setting 16x oversampling for all sensors"));
+  BME680.setOversampling(TemperatureSensor,Oversample16); // Use enumerated type values
+  BME680.setOversampling(HumiditySensor,   Oversample16);
+  BME680.setOversampling(PressureSensor,   Oversample16);
+  Serial.println(F("- Setting IIR filter to a value of 4 samples"));
+  BME680.setIIRFilter(IIR4);
+  Serial.println(F("- Setting gas measurement to 320\xC2\xB0\C for 150ms"));
+  BME680.setGas(320,150); // 320�c for 150 milliseconds
+  Serial.println();
+
+}
+
+void loop() {
+  // if there are incoming bytes available
+  // from the server, read them and print them:
+  while (client.available()) {
+    char c = client.read();
+    Serial.write(c);
+  }
+
+  static uint8_t loopCounter = 0;
+  static int32_t temperature, humidity, pressure, gas;     // Variable to store readings
+  BME680.getSensorData(temperature,humidity,pressure,gas); // Get most recent readings
+  Serial.print(temperature/100.0,2);                       // Temperature in deci-degrees
+#ifdef ESP32
+  Serial.print(F(" ")); // Esp32 compiler doesn't liked escaped string
+#else
+  Serial.print(F("\xC2\xB0\C "));                          // Representation of the � symbol
+#endif
+  Serial.print(humidity/1000.0,2);                         // Humidity in milli-percent
+  Serial.print(F("%Hum "));
+  Serial.print(pressure/100.0,2);                          // Pressure in Pascals
+  Serial.print(F("hPa "));
+  Serial.print(altitude(),2);
+  Serial.print(F("m "));
+  Serial.print(gas/100.0,2);
+  Serial.println(F("mOhm"));
+  
+  Serial.println("\nStarting connection to server...");
+  // if you get a connection, report back via serial:
+  if (client.connect(server, 80)) {
+    Serial.println("connected to server");
+    // Make a HTTP request:
+//    client.println("GET /measurements/url_create?instrument_id=13&temp=1&rh=2&press=3&voc=4&email=daniels@ucar.edu&api_key=w3C3XZupUBmz1DXk4BVB&test");
+
+    client.print("GET /measurements/url_create?instrument_id=13&temp=");
+    client.print(temperature/100.0,2);
+    client.print("&rh=");
+    client.print(humidity/1000.0,2);
+    client.print("&press=");
+    client.print(pressure/100.0,2);
+    client.print("&VOC=");
+    client.print(gas/100.0,2);
+    client.print("&rh=");
+    client.print(humidity/1000.0,2);
+    client.println("&email=daniels@ucar.edu&api_key=w3C3XZupUBmz1DXk4BVB&test");
+    client.println("Host: jetstream1.chordsrt.com");
+    client.println("Connection: close");
+    client.println();
+  }
+  
+  // if the server's disconnected, stop the client:
+  if (!client.connected()) {
+    Serial.println();
+    Serial.println("disconnecting from server.");
+    client.stop();
+
+    // do nothing forevermore:
+    while (true);
+  }
+  delay (5000);
+}
+
+
+void printWiFiStatus() {
+  // print the SSID of the network you're attached to:
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
+
+  // print your WiFi shield's IP address:
+  IPAddress ip = WiFi.localIP();
+  Serial.print("IP Address: ");
+  Serial.println(ip);
+
+  // print the received signal strength:
+  long rssi = WiFi.RSSI();
+  Serial.print("signal strength (RSSI):");
+  Serial.print(rssi);
+  Serial.println(" dBm");
+}
