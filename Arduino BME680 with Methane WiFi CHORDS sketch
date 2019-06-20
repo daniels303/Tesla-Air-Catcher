@@ -145,7 +145,7 @@ void loop() {
   if (client.connect(server, 80)) {
     Serial.println("connected to server");
     // Make a HTTP request:
-//    client.println("GET /measurements/url_create?instrument_id=13&temp=1&rh=2&press=3&voc=4&email=daniels@ucar.edu&api_key=w3C3XZupUBmz1DXk4BVB&test");
+//    client.println("GET /measurements/url_create?instrument_id=13&temp=1&rh=2&press=3&voc=4&email=[EMAIL]&api_key=[API_KEY]&test");
 
     client.print("GET /measurements/url_create?instrument_id=13&temp=");
     client.print(temperature/100.0,2);
@@ -159,7 +159,7 @@ void loop() {
     client.print(humidity/1000.0,2);
     client.print("&meth=");
     client.print(sensorValue/4096.0*3.3,2);
-    client.println("&email=daniels@ucar.edu&api_key=w3C3XZupUBmz1DXk4BVB");
+    client.println("&email=[EMAIL]&api_key=[API_KEY]");
     client.println("Host: jetstream1.chordsrt.com");
     client.println("Connection: close");
     client.println();
